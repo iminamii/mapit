@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>周辺環境マップ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            margin: auto;
+            background-color: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1f2937;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+        .facilities-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+            width: 100%;
+        }
+        .facilities-list li {
+            background-color: #e5e7eb;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1rem;
+            color: #374151;
+            box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .error-item {
+            color: #ef4444; /* red-500 */
+            background-color: #fee2e2; /* red-100 */
+        }
+        .form-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 20px;
+            width: 100%;
+            justify-content: center;
+            align-items: center;
+        }
+        #address-input, #facilities-input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #d1d5da;
+        }
+        #update-button {
+            padding: 10px 20px;
+            background-color: #3b82f6;
+            color: white;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+        }
+        #update-button:hover {
+            background-color: #2563eb;
+        }
+        .address-display {
+            font-size: 1.25rem;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>物件周辺環境マップ</h1>
+        <div id="map"></div>
+        <div id="property-address" class="address-display"></div>
+        <ul id="facilities-list" class="facilities-list"></ul>
+        <div class="form-section">
+            <input type="text" id="address-input" placeholder="物件の住所を入力してください">
+            <textarea id="facilities-input" rows="10" placeholder="周辺施設リストをHTML形式でここに入力してください。"></textarea>
+            <button id="update-button">更新</button>
+        </div>
+    </div>
+    <script>
+        let map;
+        let geocoder;
+        let infoWindow;
+        let propertyAddress;
+        let polygon = null;
+        let facilityMarkers = [];
+
+        function parseFacilitiesFromHTML(htmlString) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlString, 'text/html');
+            const listItems = doc.querySelectorAll('.cf.dibz.vat');
+            const facilities = [];
+            const colorMap = {
+                '駅': '#FF0000', // 赤
+                'スーパー': '#0000FF', // 青
+                'コンビニ': '#059669', // エメラルドグリーン
+                'ドラッグストア': '#FFA500', // オレンジ
+                '小学校': '#800080', // 紫
+                '中学校': '#0891b2', // シアンブルー
+                '幼稚園・保育園': '#db2777', // マゼンタ
+                '公園': '#008000', // 濃い緑
+                '病院': '#eab308', // ゴールド
+                'ショッピングセンター': '#A52A2A' // 茶色
+            };
+
+            listItems.forEach(item => {
+                const categoryElement = item.querySelector('.bgGreen');
+                const nameElement = item.querySelector('.fl.w320');
+                if (categoryElement && nameElement) {
+                    const category = categoryElement.textContent.trim();
+                    const nameAndDistance = nameElement.textContent.trim();
+                    const parts = nameAndDistance.split(/：|:/);
+                    const name = parts[0].trim().replace(/「|」/g, ''); // Remove quotes
+                    const distanceMatch = nameAndDistance.match(/（(\d+)ｍ）/);
+                    const distance = distanceMatch ? parseInt(distanceMatch[1], 10) : 0;
+                    
+                    const color = colorMap[category] || '#808080'; // デフォルトは灰色
+                    
+                    facilities.push({
+                        name: `${category}: ${name}`,
+                        distance: distance,
+                        address: name,
+                        color: color,
+                        category: category
+                    });
+                }
+            });
+            return facilities;
+        }
+
+        function initMap() {
+            geocoder = new google.maps.Geocoder();
+            infoWindow = new google.maps.InfoWindow();
+
+            document.getElementById('update-button').addEventListener('click', () => {
+                const newAddress = document.getElementById('address-input').value;
+                const facilitiesHTML = document.getElementById('facilities-input').value;
+                const facilities = parseFacilitiesFromHTML(facilitiesHTML);
+
+                if (newAddress && facilities.length > 0) {
+                    propertyAddress = newAddress;
+                    updateMap(facilities);
+                } else {
+                    const messageContainer = document.querySelector('.container');
+                    const messageElement = document.createElement('div');
+                    messageElement.textContent = '物件の住所と周辺施設情報を入力してください。';
+                    messageElement.style.cssText = 'color: red; margin-top: 10px; text-align: center;';
+                    messageContainer.appendChild(messageElement);
+                    setTimeout(() => messageElement.remove(), 3000);
+                }
+            });
+
+            // 初期表示
+            document.getElementById('address-input').value = '神奈川県横浜市保土ケ谷区岩崎町';
+            document.getElementById('facilities-input').value = '<ul class="cf mtn5">\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">小学校</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">横浜市立岩崎小学校：徒歩5分（370ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">中学校</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">横浜市立岩崎中学校：徒歩3分（240ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">幼稚園・保育園</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">保土ヶ谷幼稚園：徒歩7分（550ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">公園</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">保土ヶ谷公園：徒歩7分（490ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">病院</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">街のクリニック：徒歩6分（440ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">駅</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">JR保土ヶ谷駅：徒歩21分（1640ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">スーパー</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">フジスーパー保土ヶ谷店：徒歩22分（1700ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">コンビニ</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">ローソン横浜保土ヶ谷球場前店：徒歩7分（500ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">ドラッグストア</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">クリエイト横浜保土ヶ谷橋店：徒歩18分（1370ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">ショッピングセンター</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">MEGAドン・キホーテ狩場インター店：徒歩14分（1080ｍ）</div>\n\t\t\t</li>\n\t\t</ul>';
+            propertyAddress = document.getElementById('address-input').value;
+            updateMap(parseFacilitiesFromHTML(document.getElementById('facilities-input').value));
+        }
+
+        function updateMap(facilities) {
+            document.getElementById('property-address').textContent = propertyAddress;
+
+            const listElement = document.getElementById('facilities-list');
+            listElement.innerHTML = '';
+            
+            // Sort facilities by distance
+            facilities.sort((a, b) => a.distance - b.distance);
+
+            geocoder.geocode({ 'address': propertyAddress }, (results, status) => {
+                if (status === 'OK' && results[0]) {
+                    const propertyLocation = results[0].geometry.location;
+                    map = new google.maps.Map(document.getElementById('map'), {
+                        zoom: 15,
+                        center: propertyLocation,
+                    });
+
+                    if (results[0].geometry.bounds) {
+                        const bounds = results[0].geometry.bounds;
+                        const northEast = bounds.getNorthEast();
+                        const southWest = bounds.getSouthWest();
+                        
+                        const polygonCoordinates = [
+                            { lat: northEast.lat(), lng: southWest.lng() },
+                            { lat: northEast.lat(), lng: northEast.lng() },
+                            { lat: southWest.lat(), lng: northEast.lng() },
+                            { lat: southWest.lat(), lng: southWest.lng() },
+                        ];
+
+                        if (polygon) polygon.setMap(null);
+                        polygon = new google.maps.Polygon({
+                            paths: polygonCoordinates,
+                            strokeColor: '#FF0000',
+                            strokeOpacity: 0.8,
+                            strokeWeight: 2,
+                            fillColor: '#FF0000',
+                            fillOpacity: 0.35,
+                        });
+                        polygon.setMap(map);
+                    }
+                    
+                    geocodeFacilities(facilities);
+                } else {
+                    console.error('Geocode was not successful for the main address: ' + status);
+                    map = new google.maps.Map(document.getElementById('map'), {
+                        zoom: 15,
+                        center: { lat: 35.4578, lng: 139.5939 }, 
+                    });
+                    geocodeFacilities(facilities);
+                }
+            });
+        }
+
+        function geocodeFacilities(facilities) {
+            // 既存のマーカーとサークルを地図から削除
+            facilityMarkers.forEach(item => {
+                item.marker.setMap(null);
+                item.circle.setMap(null);
+            });
+            facilityMarkers = [];
+            
+            const geocodePromises = facilities.map(facility => {
+                return new Promise((resolve, reject) => {
+                    // 施設名のみで検索
+                    geocoder.geocode({ 'address': facility.address }, (results, status) => {
+                         // API返却値をコンソールに出力
+                         console.log(`-- 施設名: "${facility.address}"`);
+                         console.log(`-- APIステータス: ${status}`);
+                         console.log(`-- API返却値:`, results);
+
+                         if (status === 'OK' && results.length === 1) {
+                             const locationType = results[0].geometry.location_type;
+                             // location_typeがROOFTOPまたはRANGE_INTERPOLATEDの場合のみ成功と判断
+                             if (locationType === 'ROOFTOP' || locationType === 'RANGE_INTERPOLATED') {
+                                 resolve({ ...facility, location: results[0].geometry.location, isSuccess: true });
+                             } else {
+                                 // location_typeが不正確な場合はエラーとして扱う
+                                 console.error(`ジオコーディング失敗: ${facility.name} - 不正確な位置タイプ: ${locationType}`);
+                                 reject({ ...facility, isSuccess: false });
+                             }
+                         } else {
+                            // 検索結果が複数件またはゼロ件の場合、エラーとして扱う
+                            console.error(`ジオコーディング失敗: ${facility.name} (住所: ${facility.address})`);
+                            reject({ ...facility, isSuccess: false });
+                         }
+                    });
+                });
+            });
+
+            Promise.allSettled(geocodePromises)
+                .then(results => {
+                    const listElement = document.getElementById('facilities-list');
+                    listElement.innerHTML = ''; // Clear the list before repopulating it
+
+                    const allFacilitiesData = results.map(result => {
+                         if (result.status === 'fulfilled') {
+                             return result.value;
+                         } else {
+                             return result.reason;
+                         }
+                    });
+
+                    // successfulFacilities and allFacilitiesData are sorted by original input order
+                    const successfulFacilities = allFacilitiesData.filter(f => f && f.isSuccess);
+                    
+                    successfulFacilities.sort((a, b) => a.distance - b.distance);
+
+                    successfulFacilities.forEach((facility, index) => {
+                        const marker = new google.maps.Marker({
+                            map,
+                            position: facility.location,
+                            title: facility.name,
+                            label: {
+                                text: `${index + 1}`,
+                                color: "white",
+                                fontWeight: "bold",
+                                fontSize: "16px"
+                            },
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 12,
+                                fillColor: facility.color,
+                                fillOpacity: 1,
+                                strokeWeight: 1,
+                                strokeColor: "#ffffff"
+                            }
+                        });
+
+                        const circle = new google.maps.Circle({
+                            strokeColor: facility.color, 
+                            strokeOpacity: 0.8,
+                            strokeWeight: 2,
+                            fillColor: facility.color, 
+                            fillOpacity: 0, 
+                            map,
+                            center: facility.location,
+                            radius: facility.distance,
+                        });
+
+                        // Store marker and circle in the same object for easy management
+                        const facilityObject = { marker: marker, circle: circle, color: facility.color };
+                        facilityMarkers.push(facilityObject);
+
+                        // Add click listener to the marker
+                        marker.addListener('click', () => {
+                            // Reset all circles to be transparent
+                            facilityMarkers.forEach(item => {
+                                item.circle.setOptions({ fillOpacity: 0 });
+                            });
+
+                            // Highlight the clicked circle
+                            facilityObject.circle.setOptions({ fillOpacity: 0.2 });
+
+                            // Show info window
+                            infoWindow.setContent(`<strong>${facility.name}</strong><br>物件までの距離: ${facility.distance}m`);
+                            infoWindow.open(map, marker);
+                        });
+                    });
+
+                    // Update list items with success/error status
+                    let successfulCount = 0;
+                    allFacilitiesData.forEach((facility) => {
+                         const listItem = document.createElement('li');
+                         if (facility.isSuccess) {
+                             successfulCount++;
+                             listItem.textContent = `${successfulCount}. ${facility.name.split(':')[1].trim()} (徒歩${Math.round(facility.distance / 80)}分, ${facility.distance}m)`;
+                             listItem.style.color = facility.color;
+                         } else {
+                             listItem.textContent = `❌ ${facility.name.split(':')[1].trim()} (ジオコーディングエラー)`;
+                             listItem.classList.add('error-item');
+                         }
+                         listElement.appendChild(listItem);
+                    });
+                });
+        }
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBPFMdYtn9IqK1K6_Gsg6Lap5-WEtddWOk&callback=initMap"></script>
+</body>
+</html>
+
