@@ -29,7 +29,7 @@ jobs:
 
       - name: S3へのデプロイ (AWS CLIを使用)
         run: |
-          aws s3 sync ./ s3://mapit.faanau.co.jp/ --acl public-read --delete
+          aws s3 sync ./dist/ s3://mapit.faanau.co.jp/ --acl public-read --delete
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
