@@ -3,9 +3,6 @@
 # 環境変数からAPIキーを読み込む
 API_KEY=$GOOGLE_MAPS_API_KEY
 
-echo $GOOGLE_MAPS_API_KEY
-echo $API_KEY
-
 mkdir -p dist
 
 # テンプレートファイルを読み込み、APIキーを置き換えて新しいHTMLファイルを作成する
