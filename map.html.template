@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>周辺環境マップ</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -98,11 +99,11 @@
         <div id="map"></div>
         <div id="property-address" class="address-display"></div>
         <ul id="facilities-list" class="facilities-list"></ul>
-        <div class="form-section">
+        <form id="map-form" class="form-section">
             <input type="text" id="address-input" placeholder="物件の住所を入力してください">
             <textarea id="facilities-input" rows="10" placeholder="周辺施設リストをHTML形式でここに入力してください。"></textarea>
-            <button id="update-button">更新</button>
-        </div>
+            <button type="submit" id="update-button">更新</button>
+        </form>
     </div>
     <script>
         let map;
@@ -118,16 +119,16 @@
             const listItems = doc.querySelectorAll('.cf.dibz.vat');
             const facilities = [];
             const colorMap = {
-                '駅': '#FF0000', // 赤
-                'スーパー': '#0000FF', // 青
-                'コンビニ': '#059669', // エメラルドグリーン
-                'ドラッグストア': '#FFA500', // オレンジ
-                '小学校': '#800080', // 紫
-                '中学校': '#0891b2', // シアンブルー
-                '幼稚園・保育園': '#db2777', // マゼンタ
-                '公園': '#008000', // 濃い緑
-                '病院': '#eab308', // ゴールド
-                'ショッピングセンター': '#A52A2A' // 茶色
+                '駅': '#FF0000',
+                'スーパー': '#0000FF',
+                'コンビニ': '#059669',
+                'ドラッグストア': '#FFA500',
+                '小学校': '#800080',
+                '中学校': '#0891b2',
+                '幼稚園・保育園': '#db2777',
+                '公園': '#008000',
+                '病院': '#eab308',
+                'ショッピングセンター': '#A52A2A'
             };
 
             listItems.forEach(item => {
@@ -137,11 +138,11 @@
                     const category = categoryElement.textContent.trim();
                     const nameAndDistance = nameElement.textContent.trim();
                     const parts = nameAndDistance.split(/：|:/);
-                    const name = parts[0].trim().replace(/「|」/g, ''); // Remove quotes
+                    const name = parts[0].trim().replace(/「|」/g, '');
                     const distanceMatch = nameAndDistance.match(/（(\d+)ｍ）/);
                     const distance = distanceMatch ? parseInt(distanceMatch[1], 10) : 0;
                     
-                    const color = colorMap[category] || '#808080'; // デフォルトは灰色
+                    const color = colorMap[category] || '#808080';
                     
                     facilities.push({
                         name: `${category}: ${name}`,
@@ -159,16 +160,33 @@
             geocoder = new google.maps.Geocoder();
             infoWindow = new google.maps.InfoWindow();
 
-            document.getElementById('update-button').addEventListener('click', () => {
-                const newAddress = document.getElementById('address-input').value;
-                const facilitiesHTML = document.getElementById('facilities-input').value;
+            // URLパラメータから値を読み込む
+            const urlParams = new URLSearchParams(window.location.search);
+            const addressParam = urlParams.get('address');
+            const facilityParam = urlParams.get('facility');
+
+            const addressInput = document.getElementById('address-input');
+            const facilitiesInput = document.getElementById('facilities-input');
+            const form = document.getElementById('map-form');
+            const messageContainer = document.querySelector('.container');
+
+            if (addressParam) {
+                addressInput.value = decodeURIComponent(addressParam);
+            }
+            if (facilityParam) {
+                facilitiesInput.value = decodeURIComponent(facilityParam);
+            }
+
+            form.addEventListener('submit', (event) => {
+                event.preventDefault(); // フォームのデフォルト送信を防止
+                const newAddress = addressInput.value;
+                const facilitiesHTML = facilitiesInput.value;
                 const facilities = parseFacilitiesFromHTML(facilitiesHTML);
 
                 if (newAddress && facilities.length > 0) {
                     propertyAddress = newAddress;
                     updateMap(facilities);
                 } else {
-                    const messageContainer = document.querySelector('.container');
                     const messageElement = document.createElement('div');
                     messageElement.textContent = '物件の住所と周辺施設情報を入力してください。';
                     messageElement.style.cssText = 'color: red; margin-top: 10px; text-align: center;';
@@ -177,11 +195,11 @@
                 }
             });
 
-            // 初期表示
-            document.getElementById('address-input').value = '神奈川県横浜市保土ケ谷区岩崎町';
-            document.getElementById('facilities-input').value = '<ul class="cf mtn5">\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">小学校</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">横浜市立岩崎小学校：徒歩5分（370ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">中学校</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">横浜市立岩崎中学校：徒歩3分（240ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">幼稚園・保育園</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">保土ヶ谷幼稚園：徒歩7分（550ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">公園</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">保土ヶ谷公園：徒歩7分（490ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">病院</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">街のクリニック：徒歩6分（440ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">駅</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">JR保土ヶ谷駅：徒歩21分（1640ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">スーパー</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">フジスーパー保土ヶ谷店：徒歩22分（1700ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">コンビニ</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">ローソン横浜保土ヶ谷球場前店：徒歩7分（500ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">ドラッグストア</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">クリエイト横浜保土ヶ谷橋店：徒歩18分（1370ｍ）</div>\n\t\t\t</li>\n\t\t\t<li class="cf dibz vat">\n\t\t\t\t<div class="fl w100 mt5 mr10 fgWhite bgGreen inkFgSBrown fs10 tac">ショッピングセンター</div>\n\t\t\t\t<div class="fl w320 mt5 lh15" style="font-size:12px;">MEGAドン・キホーテ狩場インター店：徒歩14分（1080ｍ）</div>\n\t\t\t</li>\n\t\t</ul>';
-            propertyAddress = document.getElementById('address-input').value;
-            updateMap(parseFacilitiesFromHTML(document.getElementById('facilities-input').value));
+            // URLパラメータから値がセットされたら自動で更新
+            if (addressParam || facilityParam) {
+                propertyAddress = addressInput.value;
+                updateMap(parseFacilitiesFromHTML(facilitiesInput.value));
+            }
         }
 
         function updateMap(facilities) {
@@ -190,7 +208,6 @@
             const listElement = document.getElementById('facilities-list');
             listElement.innerHTML = '';
             
-            // Sort facilities by distance
             facilities.sort((a, b) => a.distance - b.distance);
 
             geocoder.geocode({ 'address': propertyAddress }, (results, status) => {
@@ -230,7 +247,7 @@
                     console.error('Geocode was not successful for the main address: ' + status);
                     map = new google.maps.Map(document.getElementById('map'), {
                         zoom: 15,
-                        center: { lat: 35.4578, lng: 139.5939 }, 
+                        center: { lat: 35.4578, lng: 139.5939 },
                     });
                     geocodeFacilities(facilities);
                 }
@@ -238,7 +255,6 @@
         }
 
         function geocodeFacilities(facilities) {
-            // 既存のマーカーとサークルを地図から削除
             facilityMarkers.forEach(item => {
                 item.marker.setMap(null);
                 item.circle.setMap(null);
@@ -247,25 +263,20 @@
             
             const geocodePromises = facilities.map(facility => {
                 return new Promise((resolve, reject) => {
-                    // 施設名のみで検索
                     geocoder.geocode({ 'address': facility.address }, (results, status) => {
-                         // API返却値をコンソールに出力
                          console.log(`-- 施設名: "${facility.address}"`);
                          console.log(`-- APIステータス: ${status}`);
                          console.log(`-- API返却値:`, results);
 
                          if (status === 'OK' && results.length === 1) {
                              const locationType = results[0].geometry.location_type;
-                             // location_typeがROOFTOPまたはRANGE_INTERPOLATEDの場合のみ成功と判断
                              if (locationType === 'ROOFTOP' || locationType === 'RANGE_INTERPOLATED') {
                                  resolve({ ...facility, location: results[0].geometry.location, isSuccess: true });
                              } else {
-                                 // location_typeが不正確な場合はエラーとして扱う
                                  console.error(`ジオコーディング失敗: ${facility.name} - 不正確な位置タイプ: ${locationType}`);
                                  reject({ ...facility, isSuccess: false });
                              }
                          } else {
-                            // 検索結果が複数件またはゼロ件の場合、エラーとして扱う
                             console.error(`ジオコーディング失敗: ${facility.name} (住所: ${facility.address})`);
                             reject({ ...facility, isSuccess: false });
                          }
@@ -276,7 +287,7 @@
             Promise.allSettled(geocodePromises)
                 .then(results => {
                     const listElement = document.getElementById('facilities-list');
-                    listElement.innerHTML = ''; // Clear the list before repopulating it
+                    listElement.innerHTML = '';
 
                     const allFacilitiesData = results.map(result => {
                          if (result.status === 'fulfilled') {
@@ -286,7 +297,6 @@
                          }
                     });
 
-                    // successfulFacilities and allFacilitiesData are sorted by original input order
                     const successfulFacilities = allFacilitiesData.filter(f => f && f.isSuccess);
                     
                     successfulFacilities.sort((a, b) => a.distance - b.distance);
@@ -313,37 +323,31 @@
                         });
 
                         const circle = new google.maps.Circle({
-                            strokeColor: facility.color, 
+                            strokeColor: facility.color,
                             strokeOpacity: 0.8,
                             strokeWeight: 2,
-                            fillColor: facility.color, 
-                            fillOpacity: 0, 
+                            fillColor: facility.color,
+                            fillOpacity: 0,
                             map,
                             center: facility.location,
                             radius: facility.distance,
                         });
 
-                        // Store marker and circle in the same object for easy management
                         const facilityObject = { marker: marker, circle: circle, color: facility.color };
                         facilityMarkers.push(facilityObject);
 
-                        // Add click listener to the marker
                         marker.addListener('click', () => {
-                            // Reset all circles to be transparent
                             facilityMarkers.forEach(item => {
                                 item.circle.setOptions({ fillOpacity: 0 });
                             });
 
-                            // Highlight the clicked circle
                             facilityObject.circle.setOptions({ fillOpacity: 0.2 });
 
-                            // Show info window
                             infoWindow.setContent(`<strong>${facility.name}</strong><br>物件までの距離: ${facility.distance}m`);
                             infoWindow.open(map, marker);
                         });
                     });
 
-                    // Update list items with success/error status
                     let successfulCount = 0;
                     allFacilitiesData.forEach((facility) => {
                          const listItem = document.createElement('li');
@@ -363,4 +367,3 @@
     <script async defer src="https://maps.googleapis.com/maps/api/js?key={{GOOGLE_MAPS_API_KEY}}&callback=initMap"></script>
 </body>
 </html>
-
