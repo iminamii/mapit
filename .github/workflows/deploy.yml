@@ -28,7 +28,7 @@ jobs:
           ./build.sh
 
       - name: S3へのデプロイ
-        uses: aws-actions/s3-sync@v1
+        uses: aws-actions/s3-sync@v1.1.2
         with:
           args: --acl public-read --delete
           bucket: mapit.faanau.co.jp
